@@ -271,6 +271,21 @@
                 });
             });
 
+            // Y tengely dinamikus skálázása
+            let yMin = Infinity;
+            let yMax = -Infinity;
+            
+            traces.forEach(trace => {
+                trace.y.forEach(val => {
+                    if (val < yMin) yMin = val;
+                    if (val > yMax) yMax = val;
+                });
+            });
+
+            // Kis margó hozzáadása az y tengelyhez
+            const yMargin = (yMax - yMin) * 0.05;
+            const yRange = [yMin - yMargin, yMax + yMargin];
+
             const layout = {
                 xaxis: {
                     title: 'Naptári év',
@@ -287,7 +302,8 @@
                     type: 'linear'
                 },
                 yaxis: {
-                    title: 'Kumulatív termékenységi arányszám'
+                    title: 'Kumulatív termékenységi arányszám',
+                    range: yRange
                 },
                 hovermode: 'x unified',
                 template: 'plotly_white',
