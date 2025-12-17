@@ -298,13 +298,13 @@
                             { label: 'Összes', step: 'all' }
                         ]
                     },
-                    rangeslider: { visible: false },
+                    rangeslider: { visible: true },
                     type: 'linear'
                 },
                 yaxis: {
                     title: 'Kumulatív termékenységi arányszám',
-                    autorange: false,
-                    range: yRange
+                    range: yRange,
+                    autorange: false
                 },
                 hovermode: 'x unified',
                 template: 'plotly_white',
