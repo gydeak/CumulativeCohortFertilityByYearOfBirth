@@ -13,12 +13,11 @@
         .control-section { margin-bottom: 20px; }
         label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
         select { width: 100%; max-width: 500px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
-        .cohort-checklist { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px; max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px; }
+        .cohort-checklist { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px; max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; border-radius: 4px; }
         .cohort-checkbox { display: flex; align-items: center; min-width: 80px; }
         .cohort-checkbox input { margin-right: 5px; }
         .button-group { margin-top: 10px; display: flex; gap: 10px; }
-        button { padding: 8px 16px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
-        button:hover { background-color: #0056b3; }
+        button { padding: 8px 16px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
         #chart { margin-top: 20px; }
         .loading { text-align: center; padding: 40px; color: #666; }
     </style>
@@ -27,15 +26,15 @@
     <div class="container">
         <h2>Évfolyamok kumulatív termékenységi görbéi</h2>
         <div class="control-section">
-            <label for="country-select">Ország(ok) kiválasztása:</label>
+            <label for="country-select">Ország(ok):</label>
             <select id="country-select" multiple size="5"></select>
         </div>
         <div class="control-section">
-            <label>Évfolyamok (születési évek) kijelölése/kikapcsolása:</label>
+            <label>Évfolyamok:</label>
             <div id="cohort-checklist" class="cohort-checklist"></div>
             <div class="button-group">
-                <button id="select-all">Összes kijelölése</button>
-                <button id="deselect-all">Összes törlése</button>
+                <button id="select-all">Összes</button>
+                <button id="deselect-all">Törlés</button>
             </div>
         </div>
         <div id="chart"></div>
@@ -53,136 +52,102 @@
                 const response = await fetch('cohort_fertility_by_age_year_country.csv');
                 const csvText = await response.text();
                 Papa.parse(csvText, {
-                    header: true,
-                    dynamicTyping: true,
-                    skipEmptyLines: true,
+                    header: true, dynamicTyping: true, skipEmptyLines: true,
                     complete: function(results) {
-                        data = results.data.filter(row => 
-                            row.births_per_woman !== null && row.TIME_PERIOD !== null && row.age !== null
-                        );
+                        data = results.data.filter(row => row.births_per_woman != null && row.TIME_PERIOD != null);
                         data.forEach(row => {
                             const ageNum = parseInt(row.age.substring(1));
                             row.birth_year = row.TIME_PERIOD - ageNum;
                         });
                         const countrySet = new Set();
                         const cohortSet = new Set();
-                        const years = [];
                         data.forEach(row => {
                             countrySet.add(row.geo);
                             cohortSet.add(row.birth_year);
-                            years.push(row.TIME_PERIOD);
                         });
                         countries = Array.from(countrySet).sort();
                         cohorts = Array.from(cohortSet).sort((a, b) => b - a);
-                        minYear = Math.min(...years);
-                        maxYear = Math.max(...years);
+                        minYear = Math.min(...data.map(d => d.TIME_PERIOD));
+                        maxYear = Math.max(...data.map(d => d.TIME_PERIOD));
                         initializeControls();
                         updateChart();
                         document.getElementById('loading').style.display = 'none';
                     }
                 });
-            } catch (error) {
-                document.getElementById('loading').innerHTML = 'Hiba az adatok betöltésekor.';
-            }
+            } catch (e) { document.getElementById('loading').innerText = "Hiba az adatoknál."; }
         }
 
         function initializeControls() {
             const countrySelect = document.getElementById('country-select');
-            countries.forEach(country => {
-                const option = document.createElement('option');
-                option.value = country;
-                option.textContent = country;
-                if (country === 'HU') option.selected = true;
-                countrySelect.appendChild(option);
+            countries.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c; opt.textContent = c;
+                if (c === 'HU') opt.selected = true;
+                countrySelect.appendChild(opt);
             });
-            const cohortChecklist = document.getElementById('cohort-checklist');
-            const defaultSelected = cohorts.slice(0, 10);
-            cohorts.forEach(cohort => {
+            const checklist = document.getElementById('cohort-checklist');
+            cohorts.forEach(c => {
                 const div = document.createElement('div');
                 div.className = 'cohort-checkbox';
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.id = `cohort-${cohort}`;
-                checkbox.value = cohort;
-                checkbox.checked = defaultSelected.includes(cohort);
-                checkbox.addEventListener('change', updateChart);
-                const label = document.createElement('label');
-                label.htmlFor = `cohort-${cohort}`;
-                label.textContent = cohort;
-                div.appendChild(checkbox);
-                div.appendChild(label);
-                cohortChecklist.appendChild(div);
+                div.innerHTML = `<input type="checkbox" id="c-${c}" value="${c}" ${cohorts.slice(0,5).includes(c)?'checked':''}> <label for="c-${c}">${c}</label>`;
+                div.querySelector('input').addEventListener('change', updateChart);
+                checklist.appendChild(div);
             });
             countrySelect.addEventListener('change', updateChart);
-            document.getElementById('select-all').addEventListener('click', () => {
-                cohorts.forEach(c => document.getElementById(`cohort-${c}`).checked = true);
-                updateChart();
-            });
-            document.getElementById('deselect-all').addEventListener('click', () => {
-                cohorts.forEach(c => document.getElementById(`cohort-${c}`).checked = false);
-                updateChart();
-            });
+            document.getElementById('select-all').onclick = () => { cohorts.forEach(c => document.getElementById(`c-${c}`).checked = true); updateChart(); };
+            document.getElementById('deselect-all').onclick = () => { cohorts.forEach(c => document.getElementById(`c-${c}`).checked = false); updateChart(); };
         }
 
         function updateChart() {
-            const selectedCountries = Array.from(document.getElementById('country-select').selectedOptions).map(o => o.value);
-            const selectedCohorts = cohorts.filter(c => document.getElementById(`cohort-${c}`).checked);
-
-            if (selectedCountries.length === 0 || selectedCohorts.length === 0) {
-                Plotly.purge('chart');
-                return;
-            }
+            const selCountries = Array.from(document.getElementById('country-select').selectedOptions).map(o => o.value);
+            const selCohorts = cohorts.filter(c => document.getElementById(`c-${c}`).checked);
+            if (!selCountries.length || !selCohorts.length) { Plotly.purge('chart'); return; }
 
             const traces = [];
-            selectedCohorts.forEach(cohort => {
-                selectedCountries.forEach(country => {
-                    const cohortData = data.filter(row => row.geo === country && row.birth_year === cohort);
-                    if (cohortData.length > 0) {
-                        cohortData.sort((a, b) => a.TIME_PERIOD - b.TIME_PERIOD);
-                        let cumulative = 0;
-                        const x = [], y = [];
-                        cohortData.forEach(row => {
-                            cumulative += row.births_per_woman;
-                            x.push(row.TIME_PERIOD);
-                            y.push(cumulative);
-                        });
+            selCohorts.forEach(cohort => {
+                selCountries.forEach(country => {
+                    const cData = data.filter(r => r.geo === country && r.birth_year === cohort).sort((a,b) => a.TIME_PERIOD - b.TIME_PERIOD);
+                    if (cData.length) {
+                        let sum = 0;
                         traces.push({
-                            x: x, y: y, mode: 'lines+markers', name: `${country}-${cohort}`,
-                            hovertemplate: `Év: %{x}<br>Kumulatív: %{y:.3f}<extra></extra>`
+                            x: cData.map(r => r.TIME_PERIOD),
+                            y: cData.map(r => { sum += r.births_per_woman; return sum; }),
+                            name: `${country}-${cohort}`, mode: 'lines'
                         });
                     }
                 });
             });
 
             const layout = {
-                xaxis: { 
-                    title: 'Naptári év', 
-                    range: [minYear, maxYear],
-                    rangeslider: { visible: true }
-                },
-                yaxis: { 
-                    title: 'Kumulatív termékenységi arányszám',
-                    autorange: true, // Automatikus skálázás
-                    fixedrange: false 
-                },
-                // A 'constrain: "domain"' és az alábbi beállítás segít abban, 
-                // hogy zoomoláskor az Y tengely újraértékelje a látható tartományt
-                hovermode: 'x unified',
-                template: 'plotly_white',
-                height: 600,
-                margin: { l: 60, r: 40, t: 40, b: 40 }
+                xaxis: { title: 'Év', range: [minYear, maxYear], rangeslider: { visible: true } },
+                yaxis: { title: 'Kumulatív arányszám', autorange: true },
+                hovermode: 'x', template: 'plotly_white', height: 600
             };
 
-            Plotly.react('chart', traces, layout, { responsive: true, displaylogo: false });
+            Plotly.newPlot('chart', traces, layout);
 
-            // Ez az eseménykezelő kényszeríti ki az Y tengely újraszámolását, ha a csúszkát mozgatod
-            document.getElementById('chart').on('plotly_relayout', function(eventdata){
-                if(eventdata['xaxis.range[0]'] || eventdata['xaxis.range']) {
-                    Plotly.relayout('chart', {'yaxis.autorange': true});
+            // Ez a rész kényszeríti ki az Y skálázást a látható adatok alapján
+            document.getElementById('chart').on('plotly_relayout', function(edata) {
+                let xRange = [
+                    edata['xaxis.range[0]'] || edata['xaxis.range']?.[0] || minYear,
+                    edata['xaxis.range[1]'] || edata['xaxis.range']?.[1] || maxYear
+                ];
+                
+                let visibleY = [];
+                traces.forEach(t => {
+                    t.x.forEach((val, i) => {
+                        if (val >= xRange[0] && val <= xRange[1]) visibleY.push(t.y[i]);
+                    });
+                });
+
+                if (visibleY.length) {
+                    let minVal = Math.min(...visibleY);
+                    let maxVal = Math.max(...visibleY);
+                    let pad = (maxVal - minVal) * 0.05;
+                    Plotly.relayout('chart', { 'yaxis.range': [minVal - pad, maxVal + pad] });
                 }
             });
         }
-
         loadData();
     </script>
 </body>
