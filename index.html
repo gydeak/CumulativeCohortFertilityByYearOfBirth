@@ -132,6 +132,12 @@
             <button class="time-button" onclick="setTimeRange(null)">Összes</button>
         </div>
 
+        <div style="margin-top: 15px;">
+            <button id="overlay-toggle" class="toggle-button" onclick="toggleOverlayMode()">
+                Átváltás korév szerinti nézetbe
+            </button>
+        </div>
+
         <div id="chart"></div>
         <div id="loading" class="loading">Adatok betöltése...</div>
     </div>
@@ -142,6 +148,7 @@
         let cohorts = [];
         let minYear, maxYear;
         let currentXRange = null;
+        let overlayMode = false;
 
         // CSV fájl betöltése
         async function loadData() {
@@ -264,9 +271,9 @@
                 return;
             }
 
-            // Szűrés x tengely tartomány szerint
+            // Szűrés x tengely tartomány szerint (csak naptári év módban)
             let filteredData = data;
-            if (currentXRange) {
+            if (currentXRange && !overlayMode) {
                 filteredData = data.filter(row => 
                     row.TIME_PERIOD >= currentXRange[0] && row.TIME_PERIOD <= currentXRange[1]
                 );
@@ -283,6 +290,16 @@
                     );
 
                     if (cohortData.length > 0) {
+                        // Korév szerinti mód: csak teljes adatsorokat (14 korévtől kezdődő)
+                        if (overlayMode) {
+                            // Ellenőrizzük, hogy van-e adat a 14. korévre
+                            const minAge = Math.min(...cohortData.map(row => parseInt(row.age.substring(1))));
+                            if (minAge > 14) {
+                                // Kihagyjuk ezt a kohorszot, mert nem 14-től indul
+                                return;
+                            }
+                        }
+
                         // Rendezés naptári év szerint
                         cohortData.sort((a, b) => a.TIME_PERIOD - b.TIME_PERIOD);
 
@@ -290,8 +307,10 @@
                         let cumulative = 0;
                         const cumulativeData = cohortData.map(row => {
                             cumulative += row.births_per_woman;
+                            const age = parseInt(row.age.substring(1));
                             return {
                                 year: row.TIME_PERIOD,
+                                age: age,
                                 cumulative: cumulative
                             };
                         });
@@ -299,13 +318,20 @@
                         // Y értékek gyűjtése
                         cumulativeData.forEach(d => allYValues.push(d.cumulative));
 
+                        // X tengely: naptári év vagy korév
+                        const xValues = overlayMode 
+                            ? cumulativeData.map(d => d.age)
+                            : cumulativeData.map(d => d.year);
+
                         traces.push({
-                            x: cumulativeData.map(d => d.year),
+                            x: xValues,
                             y: cumulativeData.map(d => d.cumulative),
                             mode: 'lines+markers',
                             name: `${country}-${cohort}`,
                             line: { width: 2 },
-                            hovertemplate: `${country}, születési év: ${cohort}<br>Naptári év: %{x}<br>Kumulatív termékenység: %{y:.3f}<extra></extra>`
+                            hovertemplate: overlayMode
+                                ? `${country}, születési év: ${cohort}<br>Korév: %{x}<br>Kumulatív termékenység: %{y:.3f}<extra></extra>`
+                                : `${country}, születési év: ${cohort}<br>Naptári év: %{x}<br>Kumulatív termékenység: %{y:.3f}<extra></extra>`
                         });
                     }
                 });
@@ -318,9 +344,9 @@
 
             const layout = {
                 xaxis: {
-                    title: 'Naptári év',
+                    title: overlayMode ? 'Korév' : 'Naptári év',
                     type: 'linear',
-                    rangeslider: { visible: true }
+                    rangeslider: { visible: !overlayMode }
                 },
                 yaxis: {
                     title: 'Kumulatív termékenységi arányszám',
@@ -335,7 +361,10 @@
                 }
             };
 
-            if (currentXRange) {
+            // X tengely tartomány beállítása
+            if (overlayMode) {
+                layout.xaxis.range = [14, 50];
+            } else if (currentXRange) {
                 layout.xaxis.range = currentXRange;
             }
 
@@ -347,19 +376,21 @@
 
             Plotly.newPlot('chart', traces, layout, config);
 
-            // Zoom esemény kezelése
-            document.getElementById('chart').on('plotly_relayout', function(eventData) {
-                if (eventData['xaxis.range[0]'] && eventData['xaxis.range[1]']) {
-                    currentXRange = [eventData['xaxis.range[0]'], eventData['xaxis.range[1]']];
-                    updateChart();
-                } else if (eventData['xaxis.range']) {
-                    currentXRange = eventData['xaxis.range'];
-                    updateChart();
-                } else if (eventData['xaxis.autorange']) {
-                    currentXRange = null;
-                    updateChart();
-                }
-            });
+            // Zoom esemény kezelése (csak naptári év módban)
+            if (!overlayMode) {
+                document.getElementById('chart').on('plotly_relayout', function(eventData) {
+                    if (eventData['xaxis.range[0]'] && eventData['xaxis.range[1]']) {
+                        currentXRange = [eventData['xaxis.range[0]'], eventData['xaxis.range[1]']];
+                        updateChart();
+                    } else if (eventData['xaxis.range']) {
+                        currentXRange = eventData['xaxis.range'];
+                        updateChart();
+                    } else if (eventData['xaxis.autorange']) {
+                        currentXRange = null;
+                        updateChart();
+                    }
+                });
+            }
         }
 
         function setTimeRange(years) {
@@ -370,6 +401,21 @@
                 const startYear = endYear - years;
                 currentXRange = [startYear, endYear];
             }
+            updateChart();
+        }
+
+        function toggleOverlayMode() {
+            overlayMode = !overlayMode;
+            const button = document.getElementById('overlay-toggle');
+            
+            if (overlayMode) {
+                button.textContent = 'Átváltás naptári év szerinti nézetbe';
+                button.classList.add('active');
+            } else {
+                button.textContent = 'Átváltás korév szerinti nézetbe';
+                button.classList.remove('active');
+            }
+            
             updateChart();
         }
 
