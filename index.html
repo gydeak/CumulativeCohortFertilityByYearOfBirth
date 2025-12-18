@@ -153,7 +153,7 @@
         // CSV fájl betöltése
         async function loadData() {
             try {
-                const response = await fetch('cohort_fertility_by_age_year_country.csv');
+                const response = await fetch('cohort_fertility_by_age_year_country_c.csv');
                 const csvText = await response.text();
                 
                 Papa.parse(csvText, {
