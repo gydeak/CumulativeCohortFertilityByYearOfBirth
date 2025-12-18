@@ -292,10 +292,10 @@
                     if (cohortData.length > 0) {
                         // Korév szerinti mód: csak teljes adatsorokat (14 korévtől kezdődő)
                         if (overlayMode) {
-                            // Ellenőrizzük, hogy van-e adat a 14. korévre
+                            // Ellenőrizzük, hogy van-e adat a 15. korévre
                             const minAge = Math.min(...cohortData.map(row => parseInt(row.age.substring(1))));
-                            if (minAge > 14) {
-                                // Kihagyjuk ezt a kohorszot, mert nem 14-től indul
+                            if (minAge > 15) {
+                                // Kihagyjuk ezt a kohorszot, mert nem 15-től indul
                                 return;
                             }
                         }
