@@ -8,120 +8,22 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.26.0/plotly.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f5f5f5;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-
-        h2 {
-            color: #333;
-            margin-bottom: 20px;
-        }
-
-        .control-section {
-            margin-bottom: 20px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: bold;
-            color: #555;
-        }
-
-        select {
-            width: 100%;
-            max-width: 500px;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-
-        .cohort-checklist {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
-            margin-top: 10px;
-            max-height: 300px;
-            overflow-y: auto;
-            border: 1px solid #ddd;
-            padding: 10px;
-            border-radius: 4px;
-        }
-
-        .cohort-checkbox {
-            display: flex;
-            align-items: center;
-            min-width: 80px;
-        }
-
-        .cohort-checkbox input {
-            margin-right: 5px;
-        }
-
-        .button-group {
-            margin-top: 10px;
-            display: flex;
-            gap: 10px;
-        }
-
-        button {
-            padding: 8px 16px;
-            background-color: #007bff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-
-        button:hover {
-            background-color: #0056b3;
-        }
-
-        .time-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-            flex-wrap: wrap;
-        }
-
-        .time-button {
-            padding: 8px 16px;
-            border: 1px solid #007bff;
-            background: white;
-            color: #007bff;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: all 0.2s;
-        }
-
-        .time-button:hover {
-            background: #007bff;
-            color: white;
-        }
-
-        #chart {
-            margin-top: 20px;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #666;
-        }
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
+        h2 { color: #333; margin-bottom: 20px; }
+        .control-section { margin-bottom: 20px; padding: 15px; border: 1px solid #eee; border-radius: 4px; }
+        label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
+        select { width: 100%; max-width: 500px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        .cohort-checklist { display: flex; flex-wrap: wrap; gap: 15px; margin-top: 10px; max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; }
+        .cohort-checkbox { display: flex; align-items: center; min-width: 80px; }
+        .button-group { margin-top: 10px; display: flex; gap: 10px; }
+        button { padding: 8px 16px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        .time-button { padding: 8px 16px; border: 1px solid #007bff; background: white; color: #007bff; border-radius: 4px; cursor: pointer; margin-right: 5px; }
+        #age-slider-container { background: #e9ecef; display: none; margin-top: 15px; }
+        .slider-label { display: flex; justify-content: space-between; align-items: center; }
+        #chart { margin-top: 20px; }
+        .loading { text-align: center; padding: 40px; color: #666; }
     </style>
 </head>
 
@@ -135,7 +37,7 @@
         </div>
 
         <div class="control-section">
-            <label>Évfolyamok (születési évek) - Csak 15 éves kortól teljes adatsorok:</label>
+            <label>Évfolyamok (születési évek):</label>
             <div id="cohort-checklist" class="cohort-checklist"></div>
             <div class="button-group">
                 <button id="select-all">Összes kijelölése</button>
@@ -143,16 +45,24 @@
             </div>
         </div>
 
-        <div class="time-buttons">
+        <div id="calendar-controls">
             <button class="time-button" onclick="setTimeRange(10)">Utolsó 10 év</button>
             <button class="time-button" onclick="setTimeRange(20)">Utolsó 20 év</button>
             <button class="time-button" onclick="setTimeRange(30)">Utolsó 30 év</button>
             <button class="time-button" onclick="setTimeRange(null)">Összes év</button>
         </div>
 
+        <div id="age-slider-container" class="control-section">
+            <div class="slider-label">
+                <label for="age-start-slider">Kezdő életkor a kumuláláshoz: <span id="age-val">15</span> év</label>
+            </div>
+            <input type="range" id="age-start-slider" min="15" max="45" value="15" style="width: 100%;">
+            <p style="font-size: 0.85em; color: #666;">A görbék ezen életkortól kezdve indulnak 0-ról.</p>
+        </div>
+
         <div style="margin-top: 15px;">
-            <button id="overlay-toggle" class="toggle-button" onclick="toggleOverlayMode()">
-                Átváltás korév szerinti nézetbe
+            <button id="overlay-toggle" class="time-button" onclick="toggleOverlayMode()" style="background: #28a745; color: white; border: none;">
+                Átváltás korév szerinti nézetre
             </button>
         </div>
 
@@ -161,64 +71,44 @@
     </div>
 
     <script>
-        let fullData = []; // A teljes, tisztított adatbázis
+        let fullData = [];
         let countries = [];
         let cohorts = [];
         let maxYear;
         let currentXRange = null;
         let overlayMode = false;
+        let startAge = 15;
 
         async function loadData() {
             try {
                 const response = await fetch('cohort_fertility_by_age_year_country.csv');
                 const csvText = await response.text();
-
                 Papa.parse(csvText, {
                     header: true,
                     dynamicTyping: true,
                     skipEmptyLines: true,
                     complete: function (results) {
-                        // Alapvető tisztítás
-                        let rawData = results.data.filter(row =>
-                            row.births_per_woman !== null &&
-                            row.TIME_PERIOD !== null &&
-                            row.age !== null
-                        );
-
-                        // Születési év hozzáadása
+                        let rawData = results.data.filter(row => row.births_per_woman !== null && row.TIME_PERIOD !== null && row.age !== null);
                         rawData.forEach(row => {
                             row.age_num = parseInt(row.age.substring(1));
                             row.birth_year = row.TIME_PERIOD - row.age_num;
                         });
-
-                        // --- SZŰRÉS: Csak olyan kohorszok, ahol van adat 15 éves korig bezárólag ---
                         const cohortMinAgeMap = {};
                         rawData.forEach(row => {
                             const key = `${row.geo}-${row.birth_year}`;
-                            if (!cohortMinAgeMap[key] || row.age_num < cohortMinAgeMap[key]) {
-                                cohortMinAgeMap[key] = row.age_num;
-                            }
+                            if (!cohortMinAgeMap[key] || row.age_num < cohortMinAgeMap[key]) cohortMinAgeMap[key] = row.age_num;
                         });
-
-                        fullData = rawData.filter(row => {
-                            const key = `${row.geo}-${row.birth_year}`;
-                            return cohortMinAgeMap[key] <= 15;
-                        });
-                        // -----------------------------------------------------------------------
-
+                        fullData = rawData.filter(row => cohortMinAgeMap[`${row.geo}-${row.birth_year}`] <= 15);
+                        
                         const countrySet = new Set();
                         const cohortSet = new Set();
-                        const years = [];
-
                         fullData.forEach(row => {
                             countrySet.add(row.geo);
                             cohortSet.add(row.birth_year);
-                            years.push(row.TIME_PERIOD);
                         });
-
                         countries = Array.from(countrySet).sort();
                         cohorts = Array.from(cohortSet).sort((a, b) => b - a);
-                        maxYear = Math.max(...years);
+                        maxYear = Math.max(...fullData.map(r => r.TIME_PERIOD));
 
                         initializeControls();
                         updateChart();
@@ -235,42 +125,31 @@
             const countrySelect = document.getElementById('country-select');
             countries.forEach(country => {
                 const option = document.createElement('option');
-                option.value = country;
-                option.textContent = country;
+                option.value = country; option.textContent = country;
                 if (country === 'HU') option.selected = true;
                 countrySelect.appendChild(option);
             });
 
             const cohortChecklist = document.getElementById('cohort-checklist');
             const defaultSelected = cohorts.slice(0, 10);
-
             cohorts.forEach(cohort => {
                 const div = document.createElement('div');
                 div.className = 'cohort-checkbox';
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.id = `cohort-${cohort}`;
-                checkbox.value = cohort;
-                checkbox.checked = defaultSelected.includes(cohort);
-                checkbox.addEventListener('change', updateChart);
-
-                const label = document.createElement('label');
-                label.htmlFor = `cohort-${cohort}`;
-                label.textContent = cohort;
-                label.style.fontWeight = 'normal';
-
-                div.appendChild(checkbox);
-                div.appendChild(label);
+                div.innerHTML = `<input type="checkbox" id="cohort-${cohort}" value="${cohort}" ${defaultSelected.includes(cohort) ? 'checked' : ''}>
+                                 <label for="cohort-${cohort}" style="font-weight:normal">${cohort}</label>`;
+                div.querySelector('input').addEventListener('change', updateChart);
                 cohortChecklist.appendChild(div);
             });
 
             countrySelect.addEventListener('change', updateChart);
-            document.getElementById('select-all').addEventListener('click', () => {
-                cohorts.forEach(c => document.getElementById(`cohort-${c}`).checked = true);
-                updateChart();
-            });
-            document.getElementById('deselect-all').addEventListener('click', () => {
-                cohorts.forEach(c => document.getElementById(`cohort-${c}`).checked = false);
+            document.getElementById('select-all').addEventListener('click', () => { cohorts.forEach(c => document.getElementById(`cohort-${c}`).checked = true); updateChart(); });
+            document.getElementById('deselect-all').addEventListener('click', () => { cohorts.forEach(c => document.getElementById(`cohort-${c}`).checked = false); updateChart(); });
+
+            // Slider eseménykezelő
+            const slider = document.getElementById('age-start-slider');
+            slider.addEventListener('input', (e) => {
+                startAge = parseInt(e.target.value);
+                document.getElementById('age-val').textContent = startAge;
                 updateChart();
             });
         }
@@ -284,93 +163,77 @@
                 return;
             }
 
-            let traces = []; // const-ról let-re váltva, hogy sorba rendezhessük
-            const allYValues = [];
-
+            let traces = [];
             selectedCohorts.forEach(cohort => {
                 selectedCountries.forEach(country => {
-                    const cohortData = fullData.filter(row => row.geo === country && row.birth_year === cohort);
+                    let cohortData = fullData.filter(row => row.geo === country && row.birth_year === cohort);
 
                     if (cohortData.length > 0) {
                         cohortData.sort((a, b) => a.age_num - b.age_num);
 
                         let cumulative = 0;
-                        const plotPoints = cohortData.map(row => {
-                            cumulative += row.births_per_woman;
-                            return {
-                                x: overlayMode ? row.age_num : row.TIME_PERIOD,
-                                y: cumulative,
-                                age: row.age_num,
-                                year: row.TIME_PERIOD
-                            };
+                        const plotPoints = [];
+
+                        cohortData.forEach(row => {
+                            // HA korév nézetben vagyunk, csak a startAge-től kumulálunk
+                            if (overlayMode) {
+                                if (row.age_num >= startAge) {
+                                    cumulative += row.births_per_woman;
+                                    plotPoints.push({ x: row.age_num, y: cumulative });
+                                }
+                            } else {
+                                // Naptári nézetben marad az eredeti (15-től induló) logika
+                                cumulative += row.births_per_woman;
+                                plotPoints.push({ x: row.TIME_PERIOD, y: cumulative });
+                            }
                         });
 
-                        plotPoints.forEach(p => allYValues.push(p.y));
-
-                        traces.push({
-                            x: plotPoints.map(p => p.x),
-                            y: plotPoints.map(p => p.y),
-                            mode: 'lines+markers',
-                            name: `${country}-${cohort}`,
-                            hovertemplate: `${country}-${cohort} %{y:.3f}<extra></extra>`,
-                            // Elmentjük az utolsó értéket a rendezéshez
-                            lastValue: plotPoints[plotPoints.length - 1].y
-                        });
+                        if (plotPoints.length > 0) {
+                            traces.push({
+                                x: plotPoints.map(p => p.x),
+                                y: plotPoints.map(p => p.y),
+                                mode: 'lines+markers',
+                                name: `${country}-${cohort}`,
+                                hovertemplate: `${country}-${cohort}: %{y:.3f}<extra></extra>`,
+                                lastValue: plotPoints[plotPoints.length - 1].y
+                            });
+                        }
                     }
                 });
             });
 
-            // --- SORRENDEZÉS HOZZÁADÁSA ---
-            // Csökkenő sorrendbe rakjuk a görbéket az utolsó kumulatív értékük alapján
             traces.sort((a, b) => b.lastValue - a.lastValue);
-            // ------------------------------
 
             const layout = {
+                title: overlayMode ? `Kumulatív termékenység ${startAge} éves kortól számítva` : 'Kumulatív termékenység (teljes életút)',
                 xaxis: {
-                    title: overlayMode ? 'Korév' : 'Naptári év',
+                    title: overlayMode ? 'Betöltött életkor' : 'Naptári év',
                     rangeslider: { visible: !overlayMode },
-                    range: overlayMode ? [14, 50] : (currentXRange || undefined)
+                    range: overlayMode ? [Math.max(14, startAge - 1), 50] : (currentXRange || undefined)
                 },
-                yaxis: {
-                    title: 'Kumulatív termékenységi arányszám',
-                    autorange: true,
-                    fixedrange: false
-                },
+                yaxis: { title: 'Gyermekek száma (kumulatív)', autorange: true },
                 hovermode: 'x unified',
                 template: 'plotly_white',
-                height: 1200,
-                margin: { l: 60, r: 40, t: 40, b: 80 }
+                height: 1300
             };
 
             Plotly.newPlot('chart', traces, layout, { responsive: true });
-
-            document.getElementById('chart').on('plotly_relayout', function (eventData) {
-                if (eventData['xaxis.range[0]']) {
-                    currentXRange = [eventData['xaxis.range[0]'], eventData['xaxis.range[1]']];
-                } else if (eventData['xaxis.autorange']) {
-                    currentXRange = null;
-                }
-            });
-        }
-
-        function setTimeRange(years) {
-            if (years === null) {
-                currentXRange = null;
-            } else {
-                currentXRange = [maxYear - years, maxYear];
-            }
-            updateChart();
         }
 
         function toggleOverlayMode() {
             overlayMode = !overlayMode;
-            document.getElementById('overlay-toggle').textContent =
-                overlayMode ? 'Átváltás naptári év szerinti nézetbe' : 'Átváltás korév szerinti nézetbe';
+            document.getElementById('overlay-toggle').textContent = overlayMode ? 'Átáltás naptári év szerinti nézetre' : 'Váltás korév szerinti nézetre';
+            document.getElementById('calendar-controls').style.display = overlayMode ? 'none' : 'block';
+            document.getElementById('age-slider-container').style.display = overlayMode ? 'block' : 'none';
+            updateChart();
+        }
+
+        function setTimeRange(years) {
+            currentXRange = years ? [maxYear - years, maxYear] : null;
             updateChart();
         }
 
         loadData();
     </script>
 </body>
-
 </html>
