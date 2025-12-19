@@ -4,13 +4,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kumulatív Kohorsz Termékenység</title>
+    <title>Kohorsz Termékenység Vizualizáció</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.26.0/plotly.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background-color: #f5f5f5; }
         .container { max-width: 1400px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
-        h2 { color: #333; margin-bottom: 20px; }
+        h2 { color: #333; margin-bottom: 10px; }
+        .view-selector { margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #eee; }
         .control-section { margin-bottom: 20px; padding: 15px; border: 1px solid #eee; border-radius: 4px; }
         label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
         select { width: 100%; max-width: 500px; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
@@ -19,6 +20,8 @@
         .button-group { margin-top: 10px; display: flex; gap: 10px; }
         button { padding: 8px 16px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
         button:hover { background-color: #0056b3; }
+        .mode-button { padding: 10px 20px; font-size: 16px; font-weight: bold; background-color: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer; transition: 0.3s; }
+        .mode-button.active { background-color: #28a745; }
         .time-button { padding: 8px 16px; border: 1px solid #007bff; background: white; color: #007bff; border-radius: 4px; cursor: pointer; margin-right: 5px; }
         #age-slider-container { background: #e9ecef; display: none; margin-top: 15px; }
         .slider-label { display: flex; justify-content: space-between; align-items: center; }
@@ -29,7 +32,14 @@
 
 <body>
     <div class="container">
-        <h2>Évfolyamok kumulatív termékenységi görbéi</h2>
+        <h2 id="main-title">Évfolyamok kumulatív termékenységi görbéi</h2>
+        
+        <div class="view-selector">
+            <button id="view-toggle-btn" class="mode-button active" onclick="toggleViewMode()">
+                Nézet: Kumulatív
+            </button>
+            <p style="font-size: 0.9em; color: #666; margin-top: 5px;">Kattints a váltáshoz a Valós (éves gyakoriság) és a Kumulatív nézet között.</p>
+        </div>
 
         <div class="control-section">
             <label for="country-select">Ország(ok) kiválasztása:</label>
@@ -37,7 +47,7 @@
         </div>
 
         <div class="control-section">
-            <label>Évfolyamok (születési évek):</label>
+            <label id="cohort-label">Elérhető évfolyamok (születési évek):</label>
             <div id="cohort-checklist" class="cohort-checklist"></div>
             <div class="button-group">
                 <button id="select-all">Összes kijelölése</button>
@@ -74,10 +84,13 @@
         let fullData = [];
         let countries = [];
         let cohorts = [];
+        let cohortMinAgeMap = {};
+        let selectedCohortsSet = new Set(); // Eltároljuk a kijelöléseket váltáskor
         let maxYear;
         let currentXRange = null;
         let overlayMode = false;
         let startAge = 15;
+        let isCumulativeView = true;
 
         async function loadData() {
             try {
@@ -89,16 +102,22 @@
                     skipEmptyLines: true,
                     complete: function (results) {
                         let rawData = results.data.filter(row => row.births_per_woman !== null && row.TIME_PERIOD !== null && row.age !== null);
+                        
                         rawData.forEach(row => {
                             row.age_num = parseInt(row.age.substring(1));
                             row.birth_year = row.TIME_PERIOD - row.age_num;
                         });
-                        const cohortMinAgeMap = {};
+
+                        // Kezdő életkorok feltérképezése
+                        cohortMinAgeMap = {};
                         rawData.forEach(row => {
                             const key = `${row.geo}-${row.birth_year}`;
-                            if (!cohortMinAgeMap[key] || row.age_num < cohortMinAgeMap[key]) cohortMinAgeMap[key] = row.age_num;
+                            if (!cohortMinAgeMap[key] || row.age_num < cohortMinAgeMap[key]) {
+                                cohortMinAgeMap[key] = row.age_num;
+                            }
                         });
-                        fullData = rawData.filter(row => cohortMinAgeMap[`${row.geo}-${row.birth_year}`] <= 15);
+
+                        fullData = rawData;
                         
                         const countrySet = new Set();
                         const cohortSet = new Set();
@@ -108,9 +127,14 @@
                         });
                         countries = Array.from(countrySet).sort();
                         cohorts = Array.from(cohortSet).sort((a, b) => b - a);
+                        
+                        // Alapértelmezett kijelölés (első 10 évfolyam)
+                        cohorts.slice(0, 10).forEach(c => selectedCohortsSet.add(c));
+
                         maxYear = Math.max(...fullData.map(r => r.TIME_PERIOD));
 
-                        initializeControls();
+                        initializeStaticControls();
+                        refreshCohortChecklist();
                         updateChart();
                         document.getElementById('loading').style.display = 'none';
                     }
@@ -121,7 +145,7 @@
             }
         }
 
-        function initializeControls() {
+        function initializeStaticControls() {
             const countrySelect = document.getElementById('country-select');
             countries.forEach(country => {
                 const option = document.createElement('option');
@@ -130,22 +154,29 @@
                 countrySelect.appendChild(option);
             });
 
-            const cohortChecklist = document.getElementById('cohort-checklist');
-            const defaultSelected = cohorts.slice(0, 10);
-            cohorts.forEach(cohort => {
-                const div = document.createElement('div');
-                div.className = 'cohort-checkbox';
-                div.innerHTML = `<input type="checkbox" id="cohort-${cohort}" value="${cohort}" ${defaultSelected.includes(cohort) ? 'checked' : ''}>
-                                 <label for="cohort-${cohort}" style="font-weight:normal">${cohort}</label>`;
-                div.querySelector('input').addEventListener('change', updateChart);
-                cohortChecklist.appendChild(div);
+            countrySelect.addEventListener('change', () => {
+                refreshCohortChecklist();
+                updateChart();
             });
 
-            countrySelect.addEventListener('change', updateChart);
-            document.getElementById('select-all').addEventListener('click', () => { cohorts.forEach(c => document.getElementById(`cohort-${c}`).checked = true); updateChart(); });
-            document.getElementById('deselect-all').addEventListener('click', () => { cohorts.forEach(c => document.getElementById(`cohort-${c}`).checked = false); updateChart(); });
+            document.getElementById('select-all').addEventListener('click', () => {
+                const checkboxes = document.querySelectorAll('.cohort-checkbox-input');
+                checkboxes.forEach(cb => {
+                    cb.checked = true;
+                    selectedCohortsSet.add(parseInt(cb.value));
+                });
+                updateChart();
+            });
 
-            // Slider eseménykezelő
+            document.getElementById('deselect-all').addEventListener('click', () => {
+                const checkboxes = document.querySelectorAll('.cohort-checkbox-input');
+                checkboxes.forEach(cb => {
+                    cb.checked = false;
+                    selectedCohortsSet.delete(parseInt(cb.value));
+                });
+                updateChart();
+            });
+
             const slider = document.getElementById('age-start-slider');
             slider.addEventListener('input', (e) => {
                 startAge = parseInt(e.target.value);
@@ -154,18 +185,88 @@
             });
         }
 
+        // Ez a függvény frissíti a listát a nézet és a kiválasztott országok alapján
+        function refreshCohortChecklist() {
+            const checklist = document.getElementById('cohort-checklist');
+            const selectedCountries = Array.from(document.getElementById('country-select').selectedOptions).map(o => o.value);
+            checklist.innerHTML = '';
+
+            cohorts.forEach(cohort => {
+                // Ellenőrizzük, hogy az adott évfolyam megjeleníthető-e a kiválasztott országokban
+                let isValidForView = false;
+                
+                if (!isCumulativeView) {
+                    // Valós nézetben bármi jó, amihez van adat
+                    isValidForView = selectedCountries.some(country => cohortMinAgeMap[`${country}-${cohort}`] !== undefined);
+                } else {
+                    // Kumulatív nézetben csak ha van 15 éves adat (vagy kisebb) legalább egy kiválasztott országban
+                    isValidForView = selectedCountries.some(country => {
+                        const minAge = cohortMinAgeMap[`${country}-${cohort}`];
+                        return minAge !== undefined && minAge <= 15;
+                    });
+                }
+
+                if (isValidForView) {
+                    const div = document.createElement('div');
+                    div.className = 'cohort-checkbox';
+                    const isChecked = selectedCohortsSet.has(cohort);
+                    div.innerHTML = `
+                        <input type="checkbox" class="cohort-checkbox-input" id="cohort-${cohort}" value="${cohort}" ${isChecked ? 'checked' : ''}>
+                        <label for="cohort-${cohort}" style="font-weight:normal">${cohort}</label>
+                    `;
+                    
+                    div.querySelector('input').addEventListener('change', (e) => {
+                        if (e.target.checked) selectedCohortsSet.add(cohort);
+                        else selectedCohortsSet.delete(cohort);
+                        updateChart();
+                    });
+                    
+                    checklist.appendChild(div);
+                }
+            });
+        }
+
+        function toggleViewMode() {
+            isCumulativeView = !isCumulativeView;
+            const btn = document.getElementById('view-toggle-btn');
+            const title = document.getElementById('main-title');
+            
+            if (isCumulativeView) {
+                btn.textContent = "Nézet: Kumulatív";
+                btn.classList.add('active');
+                title.textContent = "Évfolyamok kumulatív termékenységi görbéi";
+                document.getElementById('age-slider-container').style.display = overlayMode ? 'block' : 'none';
+            } else {
+                btn.textContent = "Nézet: Valós";
+                btn.classList.remove('active');
+                title.textContent = "Évfolyamok éves (specifikus) termékenységi görbéi";
+                document.getElementById('age-slider-container').style.display = 'none';
+            }
+            
+            refreshCohortChecklist(); // Lista frissítése a nézetváltáskor
+            updateChart();
+        }
+
         function updateChart() {
             const selectedCountries = Array.from(document.getElementById('country-select').selectedOptions).map(o => o.value);
-            const selectedCohorts = cohorts.filter(c => document.getElementById(`cohort-${c}`).checked);
+            // Csak azokat a kohorszokat vesszük, amik a jelenlegi listában be vannak pipálva
+            const activeCheckboxes = Array.from(document.querySelectorAll('.cohort-checkbox-input:checked')).map(cb => parseInt(cb.value));
 
-            if (selectedCountries.length === 0 || selectedCohorts.length === 0) {
+            if (selectedCountries.length === 0 || activeCheckboxes.length === 0) {
                 Plotly.purge('chart');
                 return;
             }
 
             let traces = [];
-            selectedCohorts.forEach(cohort => {
+            activeCheckboxes.forEach(cohort => {
                 selectedCountries.forEach(country => {
+                    const cohortKey = `${country}-${cohort}`;
+                    
+                    // Biztonsági szűrés a grafikonon is (kumulatívnál 15 év limit)
+                    if (isCumulativeView && (cohortMinAgeMap[cohortKey] === undefined || cohortMinAgeMap[cohortKey] > 15)) {
+                        return;
+                    }
+
                     let cohortData = fullData.filter(row => row.geo === country && row.birth_year === cohort);
 
                     if (cohortData.length > 0) {
@@ -175,16 +276,21 @@
                         const plotPoints = [];
 
                         cohortData.forEach(row => {
-                            // HA korév nézetben vagyunk, csak a startAge-től kumulálunk
-                            if (overlayMode) {
-                                if (row.age_num >= startAge) {
+                            if (isCumulativeView) {
+                                if (overlayMode) {
+                                    if (row.age_num >= startAge) {
+                                        cumulative += row.births_per_woman;
+                                        plotPoints.push({ x: row.age_num, y: cumulative });
+                                    }
+                                } else {
                                     cumulative += row.births_per_woman;
-                                    plotPoints.push({ x: row.age_num, y: cumulative });
+                                    plotPoints.push({ x: row.TIME_PERIOD, y: cumulative });
                                 }
                             } else {
-                                // Naptári nézetben marad az eredeti (15-től induló) logika
-                                cumulative += row.births_per_woman;
-                                plotPoints.push({ x: row.TIME_PERIOD, y: cumulative });
+                                plotPoints.push({ 
+                                    x: overlayMode ? row.age_num : row.TIME_PERIOD, 
+                                    y: row.births_per_woman 
+                                });
                             }
                         });
 
@@ -204,17 +310,22 @@
 
             traces.sort((a, b) => b.lastValue - a.lastValue);
 
+            const yAxisTitle = isCumulativeView ? 'Gyermekek száma (kumulatív)' : 'Termékenységi arányszám';
+            const chartTitle = isCumulativeView 
+                ? (overlayMode ? `Kumulatív termékenység ${startAge} éves kortól` : 'Kumulatív termékenység (teljes életút)')
+                : (overlayMode ? 'Korspecifikus termékenység életkor szerint' : 'Korspecifikus termékenység naptári év szerint');
+
             const layout = {
-                title: overlayMode ? `Kumulatív termékenység ${startAge} éves kortól számítva` : 'Kumulatív termékenység (teljes életút)',
+                title: chartTitle,
                 xaxis: {
                     title: overlayMode ? 'Betöltött életkor' : 'Naptári év',
                     rangeslider: { visible: !overlayMode },
                     range: overlayMode ? [Math.max(14, startAge - 1), 50] : (currentXRange || undefined)
                 },
-                yaxis: { title: 'Gyermekek száma (kumulatív)', autorange: true },
+                yaxis: { title: yAxisTitle, autorange: true },
                 hovermode: 'x unified',
                 template: 'plotly_white',
-                height: 1300
+                height: 800
             };
 
             Plotly.newPlot('chart', traces, layout, { responsive: true });
@@ -222,9 +333,9 @@
 
         function toggleOverlayMode() {
             overlayMode = !overlayMode;
-            document.getElementById('overlay-toggle').textContent = overlayMode ? 'Átáltás naptári év szerinti nézetre' : 'Váltás korév szerinti nézetre';
+            document.getElementById('overlay-toggle').textContent = overlayMode ? 'Átváltás naptári év szerinti nézetre' : 'Váltás korév szerinti nézetre';
             document.getElementById('calendar-controls').style.display = overlayMode ? 'none' : 'block';
-            document.getElementById('age-slider-container').style.display = overlayMode ? 'block' : 'none';
+            document.getElementById('age-slider-container').style.display = (overlayMode && isCumulativeView) ? 'block' : 'none';
             updateChart();
         }
 
