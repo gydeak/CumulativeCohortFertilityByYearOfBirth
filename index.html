@@ -27,6 +27,23 @@
         .slider-label { display: flex; justify-content: space-between; align-items: center; }
         #chart { margin-top: 20px; }
         .loading { text-align: center; padding: 40px; color: #666; }
+        /* X-tengely váltógomb */
+        #xaxis-toggle-btn {
+            padding: 8px 16px;
+            border: 1px solid #6f42c1;
+            background: white;
+            color: #6f42c1;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 8px;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        #xaxis-toggle-btn.cohort-mode {
+            background: #6f42c1;
+            color: white;
+        }
+        #xaxis-toggle-wrap { display: none; margin-top: 10px; }
     </style>
 </head>
 
@@ -70,10 +87,16 @@
             <p style="font-size: 0.85em; color: #666;">A görbék ezen életkortól kezdve indulnak 0-ról.</p>
         </div>
 
-        <div style="margin-top: 15px;">
+        <div style="margin-top: 15px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
             <button id="overlay-toggle" class="time-button" onclick="toggleOverlayMode()" style="background: #28a745; color: white; border: none;">
                 Átváltás korév szerinti nézetre
             </button>
+            <!-- X-tengely váltó: csak kumulatív + overlay módban látható -->
+            <div id="xaxis-toggle-wrap">
+                <button id="xaxis-toggle-btn" onclick="toggleXAxisMode()">
+                    X-tengely: életkor &nbsp;↔&nbsp; születési év (oszlop)
+                </button>
+            </div>
         </div>
 
         <div id="chart"></div>
@@ -85,12 +108,14 @@
         let countries = [];
         let cohorts = [];
         let cohortMinAgeMap = {};
-        let selectedCohortsSet = new Set(); // Eltároljuk a kijelöléseket váltáskor
+        let selectedCohortsSet = new Set();
         let maxYear;
         let currentXRange = null;
         let overlayMode = false;
         let startAge = 15;
         let isCumulativeView = true;
+        // Új állapot: 'age' = vonaldiagram életkor szerint, 'cohort' = halmozott bar születési év szerint
+        let xAxisMode = 'age';
 
         async function loadData() {
             try {
@@ -108,7 +133,6 @@
                             row.birth_year = row.TIME_PERIOD - row.age_num;
                         });
 
-                        // Kezdő életkorok feltérképezése
                         cohortMinAgeMap = {};
                         rawData.forEach(row => {
                             const key = `${row.geo}-${row.birth_year}`;
@@ -128,7 +152,6 @@
                         countries = Array.from(countrySet).sort();
                         cohorts = Array.from(cohortSet).sort((a, b) => b - a);
                         
-                        // Alapértelmezett kijelölés (első 10 évfolyam)
                         cohorts.slice(0, 10).forEach(c => selectedCohortsSet.add(c));
 
                         maxYear = Math.max(...fullData.map(r => r.TIME_PERIOD));
@@ -185,21 +208,17 @@
             });
         }
 
-        // Ez a függvény frissíti a listát a nézet és a kiválasztott országok alapján
         function refreshCohortChecklist() {
             const checklist = document.getElementById('cohort-checklist');
             const selectedCountries = Array.from(document.getElementById('country-select').selectedOptions).map(o => o.value);
             checklist.innerHTML = '';
 
             cohorts.forEach(cohort => {
-                // Ellenőrizzük, hogy az adott évfolyam megjeleníthető-e a kiválasztott országokban
                 let isValidForView = false;
                 
                 if (!isCumulativeView) {
-                    // Valós nézetben bármi jó, amihez van adat
                     isValidForView = selectedCountries.some(country => cohortMinAgeMap[`${country}-${cohort}`] !== undefined);
                 } else {
-                    // Kumulatív nézetben csak ha van 15 éves adat (vagy kisebb) legalább egy kiválasztott országban
                     isValidForView = selectedCountries.some(country => {
                         const minAge = cohortMinAgeMap[`${country}-${cohort}`];
                         return minAge !== undefined && minAge <= 15;
@@ -241,15 +260,109 @@
                 btn.classList.remove('active');
                 title.textContent = "Évfolyamok éves (specifikus) termékenységi görbéi";
                 document.getElementById('age-slider-container').style.display = 'none';
+                // Ha valós nézetbe váltunk, az xAxisMode visszaáll
+                xAxisMode = 'age';
             }
             
-            refreshCohortChecklist(); // Lista frissítése a nézetváltáskor
+            updateXAxisToggleVisibility();
+            refreshCohortChecklist();
             updateChart();
         }
 
+        function toggleXAxisMode() {
+            xAxisMode = (xAxisMode === 'age') ? 'cohort' : 'age';
+            const btn = document.getElementById('xaxis-toggle-btn');
+            if (xAxisMode === 'cohort') {
+                btn.textContent = 'X-tengely: születési év (oszlop) ↔ életkor';
+                btn.classList.add('cohort-mode');
+            } else {
+                btn.textContent = 'X-tengely: életkor ↔ születési év (oszlop)';
+                btn.classList.remove('cohort-mode');
+            }
+            updateChart();
+        }
+
+        function updateXAxisToggleVisibility() {
+            // A váltógomb csak kumulatív + overlay módban releváns
+            const wrap = document.getElementById('xaxis-toggle-wrap');
+            wrap.style.display = (isCumulativeView && overlayMode) ? 'inline-block' : 'none';
+            // Ha elrejtjük, xAxisMode visszaáll
+            if (!(isCumulativeView && overlayMode)) {
+                xAxisMode = 'age';
+                const btn = document.getElementById('xaxis-toggle-btn');
+                btn.textContent = 'X-tengely: életkor ↔ születési év (oszlop)';
+                btn.classList.remove('cohort-mode');
+            }
+        }
+
+        // ─── Halmozott oszlopdiagram születési kohorsz x-tengelyen ───────────────
+        function buildStackedBarByCohort(selectedCountries, activeCheckboxes) {
+            // Kor-sávok: startAge-tól 49-ig, minden egyes életév egy sáv
+            // (vagy lehetne pl. 5 éves csoportok; most évenként)
+            // A trace-ek az életkorokat reprezentálják, x = születési kohorsz
+
+            // Összegyűjtjük a létező életkori értékeket
+            const ageSet = new Set();
+            activeCheckboxes.forEach(cohort => {
+                selectedCountries.forEach(country => {
+                    const cohortKey = `${country}-${cohort}`;
+                    if (cohortMinAgeMap[cohortKey] === undefined || cohortMinAgeMap[cohortKey] > 15) return;
+                    fullData.filter(row => row.geo === country && row.birth_year === cohort && row.age_num >= startAge)
+                        .forEach(row => ageSet.add(row.age_num));
+                });
+            });
+            const ages = Array.from(ageSet).sort((a, b) => a - b);
+
+            // X-tengelyen: ország–kohorsz kombinációk rendezve
+            const xLabels = [];
+            activeCheckboxes.sort((a, b) => a - b).forEach(cohort => {
+                selectedCountries.forEach(country => {
+                    const cohortKey = `${country}-${cohort}`;
+                    if (cohortMinAgeMap[cohortKey] === undefined || cohortMinAgeMap[cohortKey] > 15) return;
+                    const label = selectedCountries.length > 1 ? `${country}-${cohort}` : `${cohort}`;
+                    xLabels.push({ label, cohort, country });
+                });
+            });
+
+            // Egy trace = egy életkor, értéke az adott korban adott ország-kohorsznál a births_per_woman
+            // A halmozás az összes megelőző kor összegét adja ki → kumulatív hatás vizuálisan
+            const traces = ages.map(age => {
+                const yVals = xLabels.map(({ cohort, country }) => {
+                    const row = fullData.find(r => r.geo === country && r.birth_year === cohort && r.age_num === age);
+                    return row ? row.births_per_woman : 0;
+                });
+                return {
+                    x: xLabels.map(l => l.label),
+                    y: yVals,
+                    name: `${age} év`,
+                    type: 'bar',
+                    hovertemplate: `<b>Kor: ${age}</b><br>%{x}<br>Hozzájárulás: %{y:.4f}<extra></extra>`
+                };
+            });
+
+            const layout = {
+                title: `Kumulatív termékenység ${startAge} éves kortól – kohorsz szerint (halmozott)`,
+                barmode: 'stack',
+                xaxis: {
+                    title: 'Születési kohorsz',
+                    tickangle: -45
+                },
+                yaxis: {
+                    title: 'Kumulatív termékenység (életkor-specifikus összeg)',
+                    autorange: true
+                },
+                hovermode: 'closest',
+                template: 'plotly_white',
+                height: 800,
+                legend: { title: { text: 'Életkor' }, traceorder: 'normal' }
+            };
+
+            Plotly.newPlot('chart', traces, layout, { responsive: true });
+        }
+        // ─────────────────────────────────────────────────────────────────────────
+
         function updateChart() {
             const selectedCountries = Array.from(document.getElementById('country-select').selectedOptions).map(o => o.value);
-            // Csak azokat a kohorszokat vesszük, amik a jelenlegi listában be vannak pipálva
             const activeCheckboxes = Array.from(document.querySelectorAll('.cohort-checkbox-input:checked')).map(cb => parseInt(cb.value));
 
             if (selectedCountries.length === 0 || activeCheckboxes.length === 0) {
@@ -257,12 +370,18 @@
                 return;
             }
 
+            // ── Halmozott oszlop mód ──────────────────────────────────────────────
+            if (isCumulativeView && overlayMode && xAxisMode === 'cohort') {
+                buildStackedBarByCohort(selectedCountries, activeCheckboxes);
+                return;
+            }
+            // ─────────────────────────────────────────────────────────────────────
+
             let traces = [];
             activeCheckboxes.forEach(cohort => {
                 selectedCountries.forEach(country => {
                     const cohortKey = `${country}-${cohort}`;
                     
-                    // Biztonsági szűrés a grafikonon is (kumulatívnál 15 év limit)
                     if (isCumulativeView && (cohortMinAgeMap[cohortKey] === undefined || cohortMinAgeMap[cohortKey] > 15)) {
                         return;
                     }
@@ -279,8 +398,8 @@
                             if (isCumulativeView) {
                                 if (overlayMode) {
                                     if (row.age_num >= startAge) {
-                                        plotPoints.push({ x: row.age_num, y: cumulative }); // előbb rögzít
-                                        cumulative += row.births_per_woman;                   // aztán kumulál
+                                        plotPoints.push({ x: row.age_num, y: cumulative });
+                                        cumulative += row.births_per_woman;
                                     }
                                 } else {
                                     cumulative += row.births_per_woman;
@@ -300,7 +419,7 @@
                                 y: plotPoints.map(p => p.y),
                                 mode: 'lines+markers',
                                 name: `${country}-${cohort}`,
-                                hoverinfo: 'none',        // ← Plotly saját tooltip elrejtése
+                                hoverinfo: 'none',
                                 lastValue: plotPoints[plotPoints.length - 1].y
                             });
                         }
@@ -379,6 +498,7 @@
             document.getElementById('overlay-toggle').textContent = overlayMode ? 'Átváltás naptári év szerinti nézetre' : 'Váltás korév szerinti nézetre';
             document.getElementById('calendar-controls').style.display = overlayMode ? 'none' : 'block';
             document.getElementById('age-slider-container').style.display = (overlayMode && isCumulativeView) ? 'block' : 'none';
+            updateXAxisToggleVisibility();
             updateChart();
         }
 
