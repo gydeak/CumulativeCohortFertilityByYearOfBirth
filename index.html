@@ -265,7 +265,7 @@
                         countries = Array.from(countrySet).sort();
                         cohorts = Array.from(cohortSet).sort((a, b) => b - a);
                         
-                        cohorts.slice(0, 10).forEach(c => selectedCohortsSet.add(c));
+                        cohorts.forEach(c => selectedCohortsSet.add(c));
 
                         maxYear = Math.max(...fullData.map(r => r.TIME_PERIOD));
 
